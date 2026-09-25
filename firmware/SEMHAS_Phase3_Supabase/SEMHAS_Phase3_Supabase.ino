@@ -15,8 +15,8 @@
 // "416-5g" will NOT work when that SSID is a 5 GHz-only network.
 // We therefore try the requested SSID first, then automatically
 // fall back to the 2.4 GHz SSID using the same password.
-const char* WIFI_SSID = "415-2.4G";
-const char* WIFI_PASSWORD = "jis@1234";
+const char* WIFI_SSID = "Galaxy A03s";
+const char* WIFI_PASSWORD = "Shubhashis123";
 
 // ===============================
 // Supabase Configuration
