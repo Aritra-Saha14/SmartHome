@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+.kotlin
+__pycache__/
+*.pyc
+temp_aar_audit/
+hs_err_pid*.log
+.agents/
