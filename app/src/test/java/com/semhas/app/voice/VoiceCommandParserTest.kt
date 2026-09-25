@@ -2,6 +2,7 @@ package com.semhas.app.voice
 
 import com.semhas.app.data.model.Channel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
