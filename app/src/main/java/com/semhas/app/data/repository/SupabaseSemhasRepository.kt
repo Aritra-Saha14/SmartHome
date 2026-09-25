@@ -180,6 +180,9 @@ class SupabaseSemhasRepository(
     private val _historyEvents = MutableStateFlow<List<HistoryEvent>>(emptyList())
     override val historyEvents: StateFlow<List<HistoryEvent>> = _historyEvents.asStateFlow()
 
+    private val _monthlyBillLimit = MutableStateFlow(Constants.DEFAULT_MONTHLY_BILL_LIMIT)
+    override val monthlyBillLimit: StateFlow<Double> = _monthlyBillLimit.asStateFlow()
+
     private val applianceIdToChannelNumber = ConcurrentHashMap<String, Int>()
     private val applianceIdMap = ConcurrentHashMap<Int, ApplianceDto>()
     private val latestReadingsMap = ConcurrentHashMap<Int, LiveReadingDto>()
@@ -206,6 +209,12 @@ class SupabaseSemhasRepository(
                 Log.d(TAG, "Loaded persisted electricity rate: ₹$currentRate/Wh")
             } catch (e: Exception) {
                 currentRate = Constants.DEFAULT_ELECTRICITY_RATE_PER_WH
+            }
+            try {
+                _monthlyBillLimit.value = rateStore.getSavedMonthlyLimit()
+                Log.d(TAG, "Loaded persisted monthly bill limit: ₹${_monthlyBillLimit.value}")
+            } catch (e: Exception) {
+                _monthlyBillLimit.value = Constants.DEFAULT_MONTHLY_BILL_LIMIT
             }
             _billing.value = _billing.value.copy(ratePerWh = currentRate)
             _energyUsage.value = _energyUsage.value.copy(ratePerWh = currentRate)
@@ -1103,6 +1112,17 @@ class SupabaseSemhasRepository(
         updateAggregatedBillingAndEnergy(updatedChannels)
     }
 
+    override suspend fun setMonthlyBillLimit(limit: Double) {
+        if (limit <= 0.0) return
+        Log.d(TAG, "setMonthlyBillLimit: ₹$limit")
+        _monthlyBillLimit.value = limit
+        try {
+            rateStore.saveMonthlyLimit(limit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error persisting monthly bill limit: ${e.message}")
+        }
+    }
+
     override suspend fun markNotificationAsRead(id: String) {
         _notifications.value = _notifications.value.map { notif ->
             if (notif.id == id) notif.copy(isRead = true) else notif
@@ -1148,6 +1168,7 @@ class SupabaseSemhasRepository(
     }
 
     override suspend fun setChannelIntensity(channelId: Int, intensity: Int) {
+        Log.i(TAG, "[SEMHAS][INTENSITY] CH$channelId -> $intensity%")
         Log.i(TAG, "INTENSITY_ACTION_STARTED: channel=$channelId requestedIntensity=$intensity")
 
         if (!SupabaseConfig.isConfigured) {

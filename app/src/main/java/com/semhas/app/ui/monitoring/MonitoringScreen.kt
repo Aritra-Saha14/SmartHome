@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,6 +22,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.semhas.app.data.model.Channel
 import com.semhas.app.ui.components.AppCard
 import com.semhas.app.ui.components.SectionHeader
@@ -143,18 +147,25 @@ private fun DetailedChannelTelemetryCard(channel: Channel) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     StatusIndicator(
                         status = if (channel.relayState) StatusType.ACTIVE else StatusType.INACTIVE,
                         label = "Ch ${channel.channelNumber}"
                     )
+                    Spacer(modifier = Modifier.width(Dimensions.spaceSmall))
                     Text(
                         text = channel.applianceName,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(start = Dimensions.spaceSmall)
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(Dimensions.spaceSmall))
 
                 Text(
                     text = if (channel.relayState) Formatters.formatPower(channel.power) else "0.0 W",
@@ -165,42 +176,51 @@ private fun DetailedChannelTelemetryCard(channel: Channel) {
 
             Spacer(modifier = Modifier.height(Dimensions.spaceMedium))
 
-            // 6-metric grid (Voltage, Current, Power, Energy, Runtime, Cost)
+            // Responsive 3-column metric grid: Row 1 (Voltage, Current, Energy)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(Dimensions.spaceSmall),
+                verticalAlignment = Alignment.Top
             ) {
                 MetricColumn(
                     label = "Voltage",
-                    value = Formatters.formatVoltage(channel.voltage)
+                    value = Formatters.formatVoltage(channel.voltage),
+                    modifier = Modifier.weight(1f)
                 )
                 MetricColumn(
                     label = "Current",
-                    value = if (channel.relayState) Formatters.formatCurrent(channel.current) else "0.00 A"
+                    value = if (channel.relayState) Formatters.formatCurrent(channel.current) else "0.00 A",
+                    modifier = Modifier.weight(1f)
                 )
                 MetricColumn(
                     label = "Energy",
-                    value = Formatters.formatEnergy(channel.energy)
+                    value = Formatters.formatEnergy(channel.energy),
+                    modifier = Modifier.weight(1f)
                 )
             }
 
             Spacer(modifier = Modifier.height(Dimensions.spaceSmall))
 
+            // Responsive 3-column metric grid: Row 2 (Runtime, Est. Cost, Sensor Health)
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(Dimensions.spaceSmall),
+                verticalAlignment = Alignment.Top
             ) {
                 MetricColumn(
                     label = "Runtime",
-                    value = Formatters.formatRuntime(channel.runtime)
+                    value = Formatters.formatRuntime(channel.runtime),
+                    modifier = Modifier.weight(1f)
                 )
                 MetricColumn(
                     label = "Est. Cost",
-                    value = Formatters.formatCurrency(channel.estimatedCost)
+                    value = Formatters.formatCurrency(channel.estimatedCost),
+                    modifier = Modifier.weight(1f)
                 )
                 MetricColumn(
                     label = "Sensor Health",
-                    value = if (channel.isHealthy) "Good" else "Fault"
+                    value = if (channel.isHealthy) "Good" else "Fault",
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -208,17 +228,30 @@ private fun DetailedChannelTelemetryCard(channel: Channel) {
 }
 
 @Composable
-private fun MetricColumn(label: String, value: String) {
-    Column {
+private fun MetricColumn(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center
+    ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
+        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

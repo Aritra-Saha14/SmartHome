@@ -6,6 +6,7 @@ import com.semhas.app.data.model.Channel
 import com.semhas.app.data.model.HistoricalBillingSummary
 import com.semhas.app.data.model.PeriodAnalyticsData
 import com.semhas.app.data.repository.SemhasRepository
+import com.semhas.app.utils.Constants
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,8 @@ data class AnalyticsUiState(
     val periodData: PeriodAnalyticsData = PeriodAnalyticsData(),
     val billingSummary: HistoricalBillingSummary = HistoricalBillingSummary(),
     val channels: List<Channel> = emptyList(),
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val monthlyBillLimit: Double = Constants.DEFAULT_MONTHLY_BILL_LIMIT
 )
 
 class AnalyticsViewModel(
@@ -75,8 +77,9 @@ class AnalyticsViewModel(
         selectionFlow,
         _periodData,
         repository.billingSummary,
-        repository.channels
-    ) { sel, periodData, billingSummary, channels ->
+        repository.channels,
+        repository.monthlyBillLimit
+    ) { sel, periodData, billingSummary, channels, monthlyLimit ->
         AnalyticsUiState(
             selectedPeriod = sel.period,
             selectedDate = sel.date,
@@ -85,7 +88,8 @@ class AnalyticsViewModel(
             periodData = periodData,
             billingSummary = billingSummary,
             channels = channels,
-            isLoading = sel.loading
+            isLoading = sel.loading,
+            monthlyBillLimit = monthlyLimit
         )
     }.stateIn(
         scope = viewModelScope,
@@ -106,6 +110,13 @@ class AnalyticsViewModel(
             }
         }
         loadCurrentPeriodData()
+    }
+
+    fun setMonthlyLimit(limit: Double) {
+        if (limit <= 0.0) return
+        viewModelScope.launch {
+            repository.setMonthlyBillLimit(limit)
+        }
     }
 
     fun selectPeriod(period: AnalyticsPeriod) {

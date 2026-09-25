@@ -22,6 +22,10 @@ interface BillingRateStore {
     val rateFlow: Flow<Double>
     suspend fun getSavedRate(): Double
     suspend fun saveRate(rate: Double)
+
+    val monthlyLimitFlow: Flow<Double>
+    suspend fun getSavedMonthlyLimit(): Double
+    suspend fun saveMonthlyLimit(limit: Double)
 }
 
 class DataStoreBillingPreferences(
@@ -32,6 +36,7 @@ class DataStoreBillingPreferences(
         val KEY_LEGACY_RATE = doublePreferencesKey("electricity_rate")
         val KEY_ELECTRICITY_RATE_WH = doublePreferencesKey("electricity_rate_wh")
         val KEY_RATE_MIGRATED_VERSION = booleanPreferencesKey("rate_migrated_to_wh_v1")
+        val KEY_MONTHLY_BILL_LIMIT = doublePreferencesKey("monthly_bill_limit")
     }
 
     override val rateFlow: Flow<Double> = context.billingDataStore.data
@@ -54,6 +59,18 @@ class DataStoreBillingPreferences(
                     Constants.DEFAULT_ELECTRICITY_RATE_PER_WH
                 }
             }
+        }
+
+    override val monthlyLimitFlow: Flow<Double> = context.billingDataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { preferences ->
+            preferences[KEY_MONTHLY_BILL_LIMIT] ?: Constants.DEFAULT_MONTHLY_BILL_LIMIT
         }
 
     override suspend fun getSavedRate(): Double {
@@ -96,6 +113,26 @@ class DataStoreBillingPreferences(
             // Safe fallback
         }
     }
+
+    override suspend fun getSavedMonthlyLimit(): Double {
+        return try {
+            val prefs = context.billingDataStore.data.first()
+            prefs[KEY_MONTHLY_BILL_LIMIT] ?: Constants.DEFAULT_MONTHLY_BILL_LIMIT
+        } catch (e: Exception) {
+            Constants.DEFAULT_MONTHLY_BILL_LIMIT
+        }
+    }
+
+    override suspend fun saveMonthlyLimit(limit: Double) {
+        if (limit <= 0.0) return
+        try {
+            context.billingDataStore.edit { preferences ->
+                preferences[KEY_MONTHLY_BILL_LIMIT] = limit
+            }
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+    }
 }
 
 /**
@@ -103,7 +140,8 @@ class DataStoreBillingPreferences(
  */
 class InMemoryBillingRateStore(
     initialRate: Double = Constants.DEFAULT_ELECTRICITY_RATE_PER_WH,
-    migrated: Boolean = false
+    migrated: Boolean = false,
+    initialMonthlyLimit: Double = Constants.DEFAULT_MONTHLY_BILL_LIMIT
 ) : BillingRateStore {
     private var isMigrated = migrated
     private var currentRate: Double
@@ -122,6 +160,9 @@ class InMemoryBillingRateStore(
     private val _rateFlow = MutableStateFlow(currentRate)
     override val rateFlow: Flow<Double> = _rateFlow
 
+    private val _monthlyLimitFlow = MutableStateFlow(initialMonthlyLimit)
+    override val monthlyLimitFlow: Flow<Double> = _monthlyLimitFlow
+
     override suspend fun getSavedRate(): Double = currentRate
 
     override suspend fun saveRate(rate: Double) {
@@ -129,5 +170,12 @@ class InMemoryBillingRateStore(
         currentRate = rate
         isMigrated = true
         _rateFlow.value = rate
+    }
+
+    override suspend fun getSavedMonthlyLimit(): Double = _monthlyLimitFlow.value
+
+    override suspend fun saveMonthlyLimit(limit: Double) {
+        if (limit <= 0.0) return
+        _monthlyLimitFlow.value = limit
     }
 }

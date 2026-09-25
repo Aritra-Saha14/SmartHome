@@ -98,11 +98,22 @@ class ApplianceIntensityTest {
         assertEquals(100, repository.channels.value.find { it.channelId == 4 }?.intensity)
 
         // Test CH5
+        repository.setChannelIntensity(5, 25)
+        assertEquals(25, repository.channels.value.find { it.channelId == 5 }?.intensity)
+
         repository.setChannelIntensity(5, 50)
         assertEquals(50, repository.channels.value.find { it.channelId == 5 }?.intensity)
 
         repository.setChannelIntensity(5, 75)
         assertEquals(75, repository.channels.value.find { it.channelId == 5 }?.intensity)
+
+        repository.setChannelIntensity(5, 100)
+        assertEquals(100, repository.channels.value.find { it.channelId == 5 }?.intensity)
+
+        // Verify CH1, CH2, CH3 remain unaffected at their initial intensity
+        assertEquals(100, repository.channels.value.find { it.channelId == 1 }?.intensity)
+        assertEquals(100, repository.channels.value.find { it.channelId == 2 }?.intensity)
+        assertEquals(100, repository.channels.value.find { it.channelId == 3 }?.intensity)
     }
 }
 

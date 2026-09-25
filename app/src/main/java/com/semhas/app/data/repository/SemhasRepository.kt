@@ -19,6 +19,7 @@ interface SemhasRepository {
     val energyUsage: StateFlow<EnergyUsage>
     val notifications: StateFlow<List<Notification>>
     val historyEvents: StateFlow<List<HistoryEvent>>
+    val monthlyBillLimit: StateFlow<Double>
 
     suspend fun toggleChannel(channelId: Int, state: Boolean)
     suspend fun toggleChannel(channelId: Int, state: Boolean, source: String = "UI") {
@@ -26,6 +27,7 @@ interface SemhasRepository {
     }
     suspend fun renameChannel(channelId: Int, newName: String)
     suspend fun setElectricityRate(newRate: Double)
+    suspend fun setMonthlyBillLimit(limit: Double)
     suspend fun markNotificationAsRead(id: String)
     suspend fun clearAllNotifications()
     suspend fun setAllChannels(state: Boolean)

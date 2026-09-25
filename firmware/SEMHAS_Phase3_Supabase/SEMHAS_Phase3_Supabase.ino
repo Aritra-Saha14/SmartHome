@@ -461,6 +461,11 @@ void applyIntensityDownlink(int ch, int intensity) {
   if (intensity > 100) intensity = 100;
 
   int* storedIntensityPtr = (ch == 4) ? &ch4Intensity : &ch5Intensity;
+  static bool firstSyncCH4 = true;
+  static bool firstSyncCH5 = true;
+  bool isFirstSync = (ch == 4) ? firstSyncCH4 : firstSyncCH5;
+  bool intensityChanged = (*storedIntensityPtr != intensity);
+
   *storedIntensityPtr = intensity;
 
   int duty = (int)round((float)intensity * 255.0f / 100.0f);
@@ -468,19 +473,26 @@ void applyIntensityDownlink(int ch, int intensity) {
   if (duty > 255) duty = 255;
 
   if (ch == 4) {
+    firstSyncCH4 = false;
     ledcWrite(MOSFET_CH4, ch4State ? duty : 0);
   } else {
+    firstSyncCH5 = false;
     ledcWrite(MOSFET_CH5, ch5State ? duty : 0);
   }
 
-  Serial.println();
-  Serial.print("INTENSITY_SYNC: channel=");
-  Serial.print(ch);
-  Serial.print(" intensity=");
-  Serial.print(intensity);
-  Serial.print("% pwm=");
-  Serial.println(duty);
-  Serial.flush();
+  if (intensityChanged || isFirstSync) {
+    Serial.println();
+    Serial.print("[SEMHAS][INTENSITY] CH");
+    Serial.print(ch);
+    Serial.print(" received = ");
+    Serial.print(intensity);
+    Serial.println("%");
+    Serial.print("[SEMHAS][PWM] CH");
+    Serial.print(ch);
+    Serial.print(" duty = ");
+    Serial.println(duty);
+    Serial.flush();
+  }
 }
 
 // -----------------------------------------------------
@@ -729,7 +741,7 @@ bool syncRelaysFromSupabase() {
       if (!row["relay_state"].is<bool>()) continue;
       channelPresent[ch - 1] = true;
       channelRelayState[ch - 1] = row["relay_state"].as<bool>();
-      if (!row["intensity"].isNull() && row["intensity"].is<int>()) {
+      if (!row["intensity"].isNull()) {
         hasIntensity[ch - 1] = true;
         channelIntensity[ch - 1] = row["intensity"].as<int>();
       }
@@ -753,13 +765,13 @@ bool syncRelaysFromSupabase() {
     bool* currentStatePtr = getChannelStatePtr(chNum);
     bool stateChanged = (currentStatePtr && *currentStatePtr != dbState);
 
-    // Apply relay state immediately
-    applyRelayState(chNum, dbState, "CLOUD_SYNC");
-
-    // Apply PWM intensity immediately (CH4 / CH5)
+    // Apply PWM intensity immediately (CH4 / CH5) so stored intensity is current
     if (hasIntensity[i]) {
       applyIntensityDownlink(chNum, channelIntensity[i]);
     }
+
+    // Apply relay state immediately
+    applyRelayState(chNum, dbState, "CLOUD_SYNC");
 
     int readback = digitalRead(pin);
 

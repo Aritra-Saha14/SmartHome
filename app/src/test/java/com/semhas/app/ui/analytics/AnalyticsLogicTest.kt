@@ -425,4 +425,80 @@ class AnalyticsLogicTest {
         assertEquals("0 Wh", Formatters.formatEnergy(emptyData.totalEnergyWh))
         assertEquals("₹0.00", Formatters.formatCurrency(emptyData.totalCost))
     }
+
+    // 24. Default monthly bill limit is 1500.0
+    @Test
+    fun testDefaultMonthlyBillLimit() {
+        val repository = MockSemhasRepository()
+        assertEquals(1500.0, repository.monthlyBillLimit.value, 0.001)
+        assertEquals(1500.0, com.semhas.app.utils.Constants.DEFAULT_MONTHLY_BILL_LIMIT, 0.001)
+    }
+
+    // 25. Monthly bill limit progress and remaining calculations
+    @Test
+    fun testMonthlyBillLimitProgressAndRemaining() {
+        val monthlyLimit = 1500.0
+        val currentBill = 842.60
+
+        val remaining = (monthlyLimit - currentBill).coerceAtLeast(0.0)
+        val progressFraction = (currentBill / monthlyLimit).toFloat()
+        val progressPercent = Math.round((currentBill / monthlyLimit) * 100.0).toInt()
+
+        assertEquals(657.40, remaining, 0.01)
+        assertEquals(0.5617f, progressFraction, 0.001f)
+        assertEquals(56, progressPercent)
+        assertEquals("₹842.60", Formatters.formatCurrency(currentBill))
+        assertEquals("₹657.40", Formatters.formatCurrency(remaining))
+    }
+
+    // 26. Monthly bill limit reached state
+    @Test
+    fun testMonthlyBillLimitReachedState() {
+        val monthlyLimit = 1500.0
+        val currentBillAtLimit = 1500.0
+        val currentBillOverLimit = 1750.0
+
+        val remainingAtLimit = (monthlyLimit - currentBillAtLimit).coerceAtLeast(0.0)
+        val isAtLimit = currentBillAtLimit >= monthlyLimit
+        assertEquals(0.0, remainingAtLimit, 0.001)
+        assertTrue("Limit must be reached when currentBill == monthlyLimit", isAtLimit)
+
+        val remainingOverLimit = (monthlyLimit - currentBillOverLimit).coerceAtLeast(0.0)
+        val isOverLimit = currentBillOverLimit >= monthlyLimit
+        assertEquals(0.0, remainingOverLimit, 0.001)
+        assertTrue("Limit must be reached when currentBill > monthlyLimit", isOverLimit)
+        assertEquals(250.0, currentBillOverLimit - monthlyLimit, 0.001)
+    }
+
+    // 27. Setting monthly bill limit updates repository state flow
+    @Test
+    fun testSetMonthlyBillLimitUpdatesRepository() = runBlocking {
+        val repository = MockSemhasRepository()
+        assertEquals(1500.0, repository.monthlyBillLimit.value, 0.001)
+
+        repository.setMonthlyBillLimit(2500.0)
+        assertEquals(2500.0, repository.monthlyBillLimit.value, 0.001)
+
+        // Setting non-positive values must be ignored
+        repository.setMonthlyBillLimit(-100.0)
+        assertEquals(2500.0, repository.monthlyBillLimit.value, 0.001)
+
+        repository.setMonthlyBillLimit(0.0)
+        assertEquals(2500.0, repository.monthlyBillLimit.value, 0.001)
+    }
+
+    // 28. Monthly limit numeric input validation regex
+    @Test
+    fun testMonthlyLimitInputValidationRegex() {
+        val regex = Regex("""^\d*\.?\d{0,2}$""")
+
+        assertTrue("Empty input allowed while typing", "".matches(regex))
+        assertTrue("Integer allowed", "1500".matches(regex))
+        assertTrue("Decimal with 1 place allowed", "1500.5".matches(regex))
+        assertTrue("Decimal with 2 places allowed", "1500.50".matches(regex))
+        assertFalse("Decimal with 3 places rejected", "1500.555".matches(regex))
+        assertFalse("Negative sign rejected", "-1500".matches(regex))
+        assertFalse("Alphabetic rejected", "1500abc".matches(regex))
+        assertFalse("Multiple dots rejected", "15.00.00".matches(regex))
+    }
 }

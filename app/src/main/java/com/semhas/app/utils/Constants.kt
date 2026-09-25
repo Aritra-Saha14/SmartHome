@@ -12,6 +12,7 @@ object Constants {
     const val DEFAULT_ELECTRICITY_RATE_PER_WH = 0.008 // INR per Wh (equivalent to ₹8.00/kWh)
     const val DEFAULT_ELECTRICITY_RATE = DEFAULT_ELECTRICITY_RATE_PER_WH
     const val CURRENCY_SYMBOL = "₹"
+    const val DEFAULT_MONTHLY_BILL_LIMIT = 1500.0 // Default monthly electricity bill limit in INR (₹)
 
     const val DEVICE_ID = "SEMHAS-ESP32-01"
     const val DEVICE_NAME = "SEMHAS Central Hub"

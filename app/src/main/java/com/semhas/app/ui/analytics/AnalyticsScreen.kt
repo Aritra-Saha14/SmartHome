@@ -18,31 +18,41 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +60,7 @@ import java.time.LocalTime
 import com.semhas.app.ui.components.AppCard
 import com.semhas.app.ui.components.SectionHeader
 import com.semhas.app.ui.theme.Dimensions
+import com.semhas.app.utils.Constants
 import com.semhas.app.utils.Formatters
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -59,6 +70,81 @@ fun AnalyticsScreen(
     viewModel: AnalyticsViewModel
 ) {
     val state by viewModel.uiState.collectAsState()
+    var showSetLimitDialog by remember { mutableStateOf(false) }
+
+    if (showSetLimitDialog) {
+        var inputText by remember {
+            mutableStateOf(
+                if (state.monthlyBillLimit % 1.0 == 0.0) {
+                    state.monthlyBillLimit.toInt().toString()
+                } else {
+                    state.monthlyBillLimit.toString()
+                }
+            )
+        }
+        var isError by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showSetLimitDialog = false },
+            title = {
+                Text(
+                    text = "Set Monthly Bill Limit",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Set your desired monthly electricity bill limit in INR (${Constants.CURRENCY_SYMBOL}). The progress bar and remaining amount will track your current bill against this budget.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(Dimensions.spaceMedium))
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { newText ->
+                            if (newText.isEmpty() || newText.matches(Regex("""^\d*\.?\d{0,2}$"""))) {
+                                inputText = newText
+                                isError = false
+                            }
+                        },
+                        label = { Text("Monthly Limit (${Constants.CURRENCY_SYMBOL})") },
+                        prefix = { Text("${Constants.CURRENCY_SYMBOL} ") },
+                        isError = isError,
+                        supportingText = if (isError) {
+                            { Text("Please enter a valid amount greater than 0") }
+                        } else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val parsed = inputText.toDoubleOrNull()
+                        if (parsed != null && parsed > 0.0) {
+                            viewModel.setMonthlyLimit(parsed)
+                            showSetLimitDialog = false
+                        } else {
+                            isError = true
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showSetLimitDialog = false }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     if (state.isLoading) {
         Column(
@@ -265,6 +351,154 @@ fun AnalyticsScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // MONTHLY USAGE LIMIT (Task 2)
+        if (state.selectedPeriod == AnalyticsPeriod.MONTHLY) {
+            item {
+                SectionHeader(
+                    title = "Monthly Usage Limit",
+                    subtitle = "Track monthly expenses against user-defined limit"
+                )
+            }
+
+            item {
+                val currentBill = state.periodData.totalCost
+                val limit = state.monthlyBillLimit
+                val remaining = (limit - currentBill).coerceAtLeast(0.0)
+                val progressFraction = if (limit > 0.0) (currentBill / limit).toFloat().coerceIn(0f, 1f) else 0f
+                val progressPercent = if (limit > 0.0) Math.round((currentBill / limit) * 100.0).toInt() else 0
+                val isLimitExceeded = limit > 0.0 && currentBill >= limit
+
+                AppCard(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        // 3-column metric layout
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(Dimensions.spaceSmall)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Monthly Bill Limit",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = Formatters.formatCurrency(limit),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Current Bill",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = Formatters.formatCurrency(currentBill),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isLimitExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Remaining",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = Formatters.formatCurrency(remaining),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (remaining == 0.0 && isLimitExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(Dimensions.spaceMedium))
+
+                        // Progress Bar & Percentage Label
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isLimitExceeded) "Limit Reached ($progressPercent%)" else "Progress: $progressPercent%",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isLimitExceeded) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (isLimitExceeded) {
+                                Text(
+                                    text = "Over by ${Formatters.formatCurrency(currentBill - limit)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(Dimensions.spaceExtraSmall))
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(5.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progressFraction)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(
+                                        if (isLimitExceeded) MaterialTheme.colorScheme.error
+                                        else if (progressFraction > 0.8f) MaterialTheme.colorScheme.tertiary
+                                        else MaterialTheme.colorScheme.primary
+                                    )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(Dimensions.spaceMedium))
+
+                        // Action Button
+                        OutlinedButton(
+                            onClick = { showSetLimitDialog = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(Dimensions.spaceSmall))
+                            Text("Set Monthly Limit")
                         }
                     }
                 }

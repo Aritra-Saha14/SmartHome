@@ -10,6 +10,7 @@ import com.semhas.app.data.model.HistoryEvent
 import com.semhas.app.data.model.Notification
 import com.semhas.app.data.model.PeriodAnalyticsData
 import com.semhas.app.data.repository.SemhasRepository
+import com.semhas.app.utils.Constants
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -71,7 +72,16 @@ class MockSemhasRepository(
     private val _historyEvents = MutableStateFlow(MockData.getInitialHistoryEvents())
     override val historyEvents: StateFlow<List<HistoryEvent>> = _historyEvents.asStateFlow()
 
+    private val _monthlyBillLimit = MutableStateFlow(Constants.DEFAULT_MONTHLY_BILL_LIMIT)
+    override val monthlyBillLimit: StateFlow<Double> = _monthlyBillLimit.asStateFlow()
+
     init {
+        scope.launch {
+            _monthlyBillLimit.value = rateStore.getSavedMonthlyLimit()
+            rateStore.monthlyLimitFlow.collect { limit ->
+                _monthlyBillLimit.value = limit
+            }
+        }
         startTelemetrySimulation()
     }
 
@@ -258,6 +268,12 @@ class MockSemhasRepository(
         _historyEvents.value = listOf(event) + _historyEvents.value
     }
 
+    override suspend fun setMonthlyBillLimit(limit: Double) {
+        if (limit <= 0.0) return
+        _monthlyBillLimit.value = limit
+        rateStore.saveMonthlyLimit(limit)
+    }
+
     fun clearHistoricalData() {
         isHistoricalDataCleared = true
         _channels.value = _channels.value.map { channel ->
@@ -332,6 +348,7 @@ class MockSemhasRepository(
     }
 
     override suspend fun setChannelIntensity(channelId: Int, intensity: Int) {
+        Log.i(TAG, "[SEMHAS][INTENSITY] CH$channelId -> $intensity%")
         Log.i(TAG, "INTENSITY_ACTION_STARTED: channel=$channelId requestedIntensity=$intensity")
         _channels.value = _channels.value.map { ch ->
             if (ch.channelId == channelId) ch.copy(intensity = intensity) else ch
