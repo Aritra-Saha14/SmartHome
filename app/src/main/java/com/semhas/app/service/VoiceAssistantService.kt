@@ -55,7 +55,7 @@ class VoiceAssistantService : Service() {
     }
 
     private fun startForegroundWithNotification() {
-        val initialNotification = buildNotification("Listening for \"Hey Jarvis\"...")
+        val initialNotification = buildNotification("Listening for \"Hey SEM\"...")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -73,8 +73,8 @@ class VoiceAssistantService : Service() {
         serviceScope.launch {
             manager.state.collectLatest { state ->
                 val notificationText = when (state) {
-                    VoiceAssistantState.WAITING_FOR_WAKE -> "Listening for \"Hey Jarvis\"..."
-                    VoiceAssistantState.WAKE_DETECTED -> "\"Hey Jarvis\" detected..."
+                    VoiceAssistantState.WAITING_FOR_WAKE -> "Listening for \"Hey SEM\"..."
+                    VoiceAssistantState.WAKE_DETECTED -> "\"Hey SEM\" detected..."
                     VoiceAssistantState.LISTENING -> "Listening for your command..."
                     VoiceAssistantState.PROCESSING -> "Processing command..."
                     VoiceAssistantState.SPEAKING -> manager.lastSpokenResponse.value ?: "Assistant responding..."

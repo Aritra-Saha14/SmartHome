@@ -40,7 +40,7 @@ class OpenWakeWord private constructor(
     private val debounceMs: Long
 ) {
     enum class BuiltInModel(internal val assetPath: String, val displayName: String) {
-        HEY_JARVIS("openwakeword/hey_jarvis_v0.1.onnx", "Hey Jarvis"),
+        HEY_SEM("openwakeword/hey_jarvis_v0.1.onnx", "Hey SEM"),
         ALEXA("openwakeword/alexa_v0.1.onnx", "Alexa"),
         HEY_MYCROFT("openwakeword/hey_mycroft_v0.1.onnx", "Hey Mycroft")
     }
@@ -64,7 +64,7 @@ class OpenWakeWord private constructor(
     }
 
     class Builder(private val context: Context) {
-        private var modelSource: ModelSource = ModelSource.BuiltIn(BuiltInModel.HEY_JARVIS)
+        private var modelSource: ModelSource = ModelSource.BuiltIn(BuiltInModel.HEY_SEM)
         private var threshold = 0.50f
         private var debounceMs = 2000L
 
@@ -387,7 +387,7 @@ class OpenWakeWord private constructor(
                     val now = System.currentTimeMillis()
                     if (now - lastDetectionTime > debounceMs) {
                         lastDetectionTime = now
-                        Log.i(TAG, "WAKE_WORD_DETECTED: 'Hey Jarvis' recognized with score=$score >= $threshold")
+                        Log.i(TAG, "WAKE_WORD_DETECTED: 'Hey SEM' recognized with score=$score >= $threshold")
                         val cb = detectionListener
                         mainHandler.post { cb?.onDetected(score) }
                     }

@@ -24,7 +24,7 @@ import java.nio.FloatBuffer
  * Usage:
  * ```
  * val detector = OpenWakeWord.Builder(context)
- *     .setModel(OpenWakeWord.BuiltInModel.HEY_JARVIS)
+ *     .setModel(OpenWakeWord.BuiltInModel.HEY_SEM)
  *     .setThreshold(0.5f)
  *     .build()
  *
@@ -43,7 +43,7 @@ class OpenWakeWord private constructor(
 
     /** Pre-trained wake word models bundled with the library. */
     enum class BuiltInModel(internal val assetPath: String, val displayName: String) {
-        HEY_JARVIS("openwakeword/hey_jarvis_v0.1.onnx", "Hey Jarvis"),
+        HEY_SEM("openwakeword/hey_jarvis_v0.1.onnx", "Hey SEM"),
         ALEXA("openwakeword/alexa_v0.1.onnx", "Alexa"),
         HEY_MYCROFT("openwakeword/hey_mycroft_v0.1.onnx", "Hey Mycroft"),
     }
@@ -58,7 +58,7 @@ class OpenWakeWord private constructor(
     // ------------------------------------------------------------------
 
     class Builder(private val context: Context) {
-        private var modelSource: ModelSource = ModelSource.BuiltIn(BuiltInModel.HEY_JARVIS)
+        private var modelSource: ModelSource = ModelSource.BuiltIn(BuiltInModel.HEY_SEM)
         private var threshold = 0.5f
         private var debounceMs = 2000L
 

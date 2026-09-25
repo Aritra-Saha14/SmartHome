@@ -140,9 +140,8 @@ object VoiceCommandParser {
 
     fun hasWakePhrase(transcript: String): Boolean {
         val clean = normalize(transcript)
-        val regexJarvis = Regex("""\bhey\s+jarvis\b""", RegexOption.IGNORE_CASE)
         val regexSem = Regex("""\bhey\s+sem\b""", RegexOption.IGNORE_CASE)
-        return regexJarvis.containsMatchIn(clean) || regexSem.containsMatchIn(clean)
+        return regexSem.containsMatchIn(clean)
     }
 
     /**
@@ -386,7 +385,7 @@ object VoiceCommandParser {
 
     private fun cleanUtterance(text: String): String {
         return text
-            .replace(Regex("""^\s*(hey|ok)\s+(jarvis|sem)\b[,.\s]*""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""^\s*(hey|ok)\s+sem\b[,.\s]*""", RegexOption.IGNORE_CASE), "")
             .replace(Regex("""^[,.\-?!;:]+"""), "")
             .replace(Regex("""^(please|can you|could you|would you|will you|kindly|i want you to|i want to|tell me|check|show me)\s+""", RegexOption.IGNORE_CASE), "")
             .trim()

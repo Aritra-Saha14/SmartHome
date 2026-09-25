@@ -15,11 +15,11 @@ enum class VoiceAssistantState(val displayLabel: String, val detailDescription: 
     ),
     WAITING_FOR_WAKE(
         displayLabel = "Waiting for wake",
-        detailDescription = "Wake detector active • Say 'Hey Jarvis'"
+        detailDescription = "Wake detector active • Say 'Hey SEM'"
     ),
     WAKE_DETECTED(
         displayLabel = "Wake detected",
-        detailDescription = "\"Hey Jarvis\" recognized!"
+        detailDescription = "\"Hey SEM\" recognized!"
     ),
     LISTENING(
         displayLabel = "Listening",

@@ -31,7 +31,7 @@ import java.util.UUID
 
 /**
  * Voice Assistant Manager coordinating:
- * 1. Background Wake-Word Detection ("Hey Jarvis" via OpenWakeWord)
+ * 1. Background Wake-Word Detection ("Hey SEM" via OpenWakeWord)
  * 2. Temporary One-Shot Command Recognition (Android SpeechRecognizer)
  * 3. Natural Language Command Parsing (VoiceCommandParser)
  * 4. Command Execution (SemhasRepository)
@@ -336,10 +336,10 @@ class VoiceAssistantManager(
             return
         }
 
-        Log.i(TAG, "VOICE_WAKE_DETECTED: 'Hey Jarvis' recognized with score=${String.format(Locale.US, "%.4f", score)}")
+        Log.i(TAG, "VOICE_WAKE_DETECTED: 'Hey SEM' recognized with score=${String.format(Locale.US, "%.4f", score)}")
 
-        _lastRecognizedCommand.value = "Hey Jarvis"
-        _currentTranscript.value = "Hey Jarvis"
+        _lastRecognizedCommand.value = "Hey SEM"
+        _currentTranscript.value = "Hey SEM"
         _state.value = VoiceAssistantState.WAKE_DETECTED
 
         // Step 1: Temporarily stop wake-word detector to release the microphone hardware

@@ -44,7 +44,7 @@ class VoiceCommandParserTest {
             "All off",
             "Turn off all",
             "Shut everything down",
-            "Hey Jarvis, please turn everything off",
+            "Hey SEM, please turn everything off",
             "Can you switch off all devices"
         )
 
@@ -65,7 +65,7 @@ class VoiceCommandParserTest {
             "Switch on everything",
             "All on",
             "Turn on all",
-            "Hey Jarvis, turn everything on"
+            "Hey SEM, turn everything on"
         )
 
         for (cmd in onCommands) {
@@ -107,7 +107,7 @@ class VoiceCommandParserTest {
             "Switch off bedroom fan",
             "Stop bedroom fan",
             "Bedroom fan off",
-            "Hey Jarvis, please switch off the bedroom fan"
+            "Hey SEM, please switch off the bedroom fan"
         )
 
         for (cmd in commands) {
@@ -364,5 +364,57 @@ class VoiceCommandParserTest {
         val result = VoiceCommandParser.parse("Turn on washing machine", channels)
         assertTrue(result is ParsedVoiceResult.Unsupported)
         assertEquals("I couldn't find that appliance.", (result as ParsedVoiceResult.Unsupported).spokenResponse)
+    }
+
+    // ==========================================
+    // 11. WAKE PHRASE DETECTION ("Hey SEM", case-insensitive)
+    // ==========================================
+
+    @Test
+    fun testWakePhraseDetectionCaseInsensitive() {
+        val validWakePhrases = listOf(
+            "Hey SEM",
+            "hey sem",
+            "HEY SEM",
+            "Hey Sem",
+            "hey   sem",
+            "Hey SEM, turn on the light",
+            "hey sem please switch off all devices",
+            "HEY SEM status"
+        )
+
+        for (phrase in validWakePhrases) {
+            assertTrue("Expected wake phrase detected for '$phrase'", VoiceCommandParser.hasWakePhrase(phrase))
+        }
+
+        val invalidWakePhrases = listOf(
+            "Hey Jarvis",
+            "hey google",
+            "alexa turn on light",
+            "hello",
+            "turn on fan"
+        )
+
+        for (phrase in invalidWakePhrases) {
+            assertFalse("Expected wake phrase NOT detected for '$phrase'", VoiceCommandParser.hasWakePhrase(phrase))
+        }
+    }
+
+    @Test
+    fun testParseWithRequireWakePhrase() {
+        // When requireWakePhrase is true, valid wake phrases should parse
+        val validCmd = "Hey SEM, turn everything off"
+        val validResult = VoiceCommandParser.parse(validCmd, channels, requireWakePhrase = true)
+        assertTrue("Expected AllDevices when wake word present", validResult is ParsedVoiceResult.AllDevices)
+
+        // When requireWakePhrase is true, commands without "Hey SEM" must be ignored
+        val invalidCmd = "Turn everything off"
+        val ignoredResult = VoiceCommandParser.parse(invalidCmd, channels, requireWakePhrase = true)
+        assertTrue("Expected Ignored when wake word absent", ignoredResult is ParsedVoiceResult.Ignored)
+
+        // Old wake word must be ignored when requireWakePhrase is true
+        val oldWakeWordCmd = "Hey Jarvis, turn everything off"
+        val oldResult = VoiceCommandParser.parse(oldWakeWordCmd, channels, requireWakePhrase = true)
+        assertTrue("Expected Ignored for old wake word", oldResult is ParsedVoiceResult.Ignored)
     }
 }

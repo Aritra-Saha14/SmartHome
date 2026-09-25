@@ -10,7 +10,7 @@ import java.util.Locale
 
 /**
  * Production wake-word detector manager using the vendored OpenWakeWord engine.
- * Runs on-device detection using ONNX Runtime for "Hey Jarvis".
+ * Runs on-device detection using ONNX Runtime for "Hey SEM".
  * Threshold fixed at 0.50. Lightweight production logs only.
  * Single microphone owner while active.
  */
@@ -29,7 +29,7 @@ class OpenWakeWordManager(
     @Volatile private var lastObservedScore: Float? = null
 
     /**
-     * Starts listening for "Hey Jarvis" wake word.
+     * Starts listening for "Hey SEM" wake word.
      * Verifies RECORD_AUDIO permission prior to initialization.
      */
     @Synchronized
@@ -50,10 +50,10 @@ class OpenWakeWordManager(
         }
 
         try {
-            Log.i(TAG, "OpenWakeWord detector starting: model=HEY_JARVIS, threshold=${String.format(Locale.US, "%.2f", threshold)}")
+            Log.i(TAG, "OpenWakeWord detector starting: model=HEY_SEM, threshold=${String.format(Locale.US, "%.2f", threshold)}")
 
             val newDetector = OpenWakeWord.Builder(context)
-                .setModel(OpenWakeWord.BuiltInModel.HEY_JARVIS)
+                .setModel(OpenWakeWord.BuiltInModel.HEY_SEM)
                 .setThreshold(threshold)
                 .setDebounceMs(debounceMs)
                 .build()
@@ -66,12 +66,12 @@ class OpenWakeWordManager(
 
             newDetector.start { score ->
                 lastObservedScore = score
-                Log.i(TAG, "WAKE_WORD_DETECTED: 'Hey Jarvis' recognized with score=${String.format(Locale.US, "%.4f", score)}")
+                Log.i(TAG, "WAKE_WORD_DETECTED: 'Hey SEM' recognized with score=${String.format(Locale.US, "%.4f", score)}")
                 onWakeWordDetected(score)
             }
 
             isListening = true
-            Log.i(TAG, "OpenWakeWord detector started and actively listening for 'Hey Jarvis'")
+            Log.i(TAG, "OpenWakeWord detector started and actively listening for 'Hey SEM'")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start OpenWakeWord detector: ${e.message}", e)

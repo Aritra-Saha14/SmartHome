@@ -406,7 +406,7 @@ private fun LatestInteractionCard(
                 val userText = when {
                     !recognizedCommand.isNullOrBlank() -> recognizedCommand
                     isListening && !currentTranscript.isNullOrBlank() -> "\"$currentTranscript...\""
-                    else -> "— (Say \"Hey Jarvis\" to begin)"
+                    else -> "— (Say \"Hey SEM\" to begin)"
                 }
                 Text(
                     text = userText,
