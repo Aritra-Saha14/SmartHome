@@ -10,7 +10,7 @@ import java.util.Locale
 
 /**
  * Production wake-word detector manager using the vendored OpenWakeWord engine.
- * Runs on-device detection using ONNX Runtime for "Hey SEM".
+ * Runs on-device detection using ONNX Runtime for "Hey Jarvis".
  * Threshold fixed at 0.50. Lightweight production logs only.
  * Single microphone owner while active.
  */
@@ -20,7 +20,7 @@ class OpenWakeWordManager(
 ) {
     companion object {
         const val TAG = "SEMHAS_WAKE"
-        const val DEFAULT_THRESHOLD = 0.50f
+        const val DEFAULT_THRESHOLD = 0.35f
         const val DEFAULT_DEBOUNCE_MS = 2000L
     }
 
@@ -29,8 +29,9 @@ class OpenWakeWordManager(
     @Volatile private var lastObservedScore: Float? = null
 
     /**
-     * Starts listening for "Hey SEM" wake word.
+     * Starts listening for "Hey Jarvis" wake word.
      * Verifies RECORD_AUDIO permission prior to initialization.
+     * Reuses warmed ONNX detector instance for instant response.
      */
     @Synchronized
     fun startDetection(
@@ -50,28 +51,31 @@ class OpenWakeWordManager(
         }
 
         try {
-            Log.i(TAG, "OpenWakeWord detector starting: model=HEY_SEM, threshold=${String.format(Locale.US, "%.2f", threshold)}")
+            Log.i(TAG, "OpenWakeWord detector starting: model=HEY_JARVIS, threshold=${String.format(Locale.US, "%.2f", threshold)}")
 
-            val newDetector = OpenWakeWord.Builder(context)
-                .setModel(OpenWakeWord.BuiltInModel.HEY_SEM)
-                .setThreshold(threshold)
-                .setDebounceMs(debounceMs)
-                .build()
+            if (detector == null) {
+                val newDetector = OpenWakeWord.Builder(context)
+                    .setModel(OpenWakeWord.BuiltInModel.HEY_JARVIS)
+                    .setThreshold(threshold)
+                    .setDebounceMs(debounceMs)
+                    .build()
 
-            newDetector.setOnScoreListener { score, _, _, _ ->
-                lastObservedScore = score
+                newDetector.setOnScoreListener { score, _, _, _ ->
+                    lastObservedScore = score
+                }
+
+                detector = newDetector
             }
 
-            detector = newDetector
-
-            newDetector.start { score ->
+            detector?.start { score ->
                 lastObservedScore = score
-                Log.i(TAG, "WAKE_WORD_DETECTED: 'Hey SEM' recognized with score=${String.format(Locale.US, "%.4f", score)}")
+                Log.i(TAG, "[SEMHAS][VOICE] Wake confidence: ${String.format(Locale.US, "%.4f", score)}")
+                Log.i(TAG, "[SEMHAS][VOICE] Wake word detected: Hey Jarvis")
                 onWakeWordDetected(score)
             }
 
             isListening = true
-            Log.i(TAG, "OpenWakeWord detector started and actively listening for 'Hey SEM'")
+            Log.i(TAG, "[SEMHAS][VOICE] Listening for Hey Jarvis")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start OpenWakeWord detector: ${e.message}", e)
@@ -80,21 +84,36 @@ class OpenWakeWordManager(
     }
 
     /**
-     * Stops detection and releases AudioRecord and ONNX inference session resources.
+     * Temporarily pauses wake detection and releases AudioRecord so microphone is available for SpeechRecognizer.
+     * Retains initialized ONNX sessions in memory for instant warm resumption.
      */
     @Synchronized
     fun stopDetection() {
-        if (!isListening && detector == null) return
+        if (!isListening) return
 
         try {
             detector?.stop()
-            detector?.release()
-            Log.i(TAG, "OpenWakeWord detector stopped successfully")
+            Log.i(TAG, "OpenWakeWord audio capture stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping OpenWakeWord detector: ${e.message}", e)
         } finally {
-            detector = null
             isListening = false
+        }
+    }
+
+    /**
+     * Fully releases AudioRecord and ONNX inference sessions when Voice Assistant is turned off.
+     */
+    @Synchronized
+    fun release() {
+        stopDetection()
+        try {
+            detector?.release()
+            Log.i(TAG, "OpenWakeWord detector and ONNX sessions released")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing OpenWakeWord detector: ${e.message}", e)
+        } finally {
+            detector = null
         }
     }
 

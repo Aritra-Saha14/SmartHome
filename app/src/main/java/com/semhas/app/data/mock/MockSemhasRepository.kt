@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import android.util.Log
@@ -77,8 +78,7 @@ class MockSemhasRepository(
 
     init {
         scope.launch {
-            _monthlyBillLimit.value = rateStore.getSavedMonthlyLimit()
-            rateStore.monthlyLimitFlow.collect { limit ->
+            rateStore.monthlyLimitFlow.drop(1).collect { limit ->
                 _monthlyBillLimit.value = limit
             }
         }

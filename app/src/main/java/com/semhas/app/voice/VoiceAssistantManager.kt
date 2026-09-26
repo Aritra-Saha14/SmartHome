@@ -3,6 +3,7 @@ package com.semhas.app.voice
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
@@ -31,7 +32,7 @@ import java.util.UUID
 
 /**
  * Voice Assistant Manager coordinating:
- * 1. Background Wake-Word Detection ("Hey SEM" via OpenWakeWord)
+ * 1. Background Wake-Word Detection ("Hey Jarvis" via OpenWakeWord)
  * 2. Temporary One-Shot Command Recognition (Android SpeechRecognizer)
  * 3. Natural Language Command Parsing (VoiceCommandParser)
  * 4. Command Execution (SemhasRepository)
@@ -47,11 +48,11 @@ class VoiceAssistantManager(
 
     companion object {
         private const val TAG = "SEMHAS_VOICE"
-        const val WAKE_THRESHOLD = 0.50f
+        const val WAKE_THRESHOLD = 0.35f
         const val WAKE_DEBOUNCE_MS = 2000L
         private const val COMMAND_TIMEOUT_MS = 7000L
-        // 200ms audio handoff window: enables AudioRecord to fully release without clipping the start of speech
-        const val HANDOFF_DELAY_MS = 200L
+        // 100ms audio handoff window: enables AudioRecord to cleanly release without clipping speech
+        const val HANDOFF_DELAY_MS = 100L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -131,6 +132,17 @@ class VoiceAssistantManager(
             tts.setSpeechRate(1.0f)
             tts.setPitch(1.0f)
 
+            // Configure audio attributes for clear and loud assistant vocal response
+            try {
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                tts.setAudioAttributes(audioAttributes)
+            } catch (e: Exception) {
+                Log.w(TAG, "AudioAttributes configuration notice: ${e.message}")
+            }
+
             tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     isSpeaking = true
@@ -203,6 +215,23 @@ class VoiceAssistantManager(
                     val params = Bundle().apply {
                         putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
                         putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+                        putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+                    }
+
+                    // Ensure minimum audible speech volume if device media stream is too low/muted
+                    try {
+                        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                        if (audioManager != null) {
+                            val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                            if (maxVol > 0 && (currentVol.toFloat() / maxVol) < 0.50f) {
+                                val targetVol = (maxVol * 0.70f).toInt().coerceIn(1, maxVol)
+                                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                                Log.i(TAG, "Adjusted low media stream volume for audible TTS: $currentVol -> $targetVol")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Audio volume check notice: ${e.message}")
                     }
 
                     Log.i(TAG, "TTS_STARTED: '$text'")
@@ -305,7 +334,7 @@ class VoiceAssistantManager(
 
             commandTimeoutJob?.cancel()
             destroySpeechRecognizerSync()
-            openWakeWordManager.stopDetection()
+            openWakeWordManager.release()
 
             try {
                 textToSpeech?.stop()
@@ -326,7 +355,7 @@ class VoiceAssistantManager(
 
     /**
      * STAGE 1: WAKE DETECTED
-     * Triggered by OpenWakeWord callback when score >= 0.50f.
+     * Triggered by OpenWakeWord callback when score >= threshold.
      */
     private fun handleWakeWordDetected(score: Float) {
         if (!_isEnabled.value) return
@@ -336,10 +365,12 @@ class VoiceAssistantManager(
             return
         }
 
-        Log.i(TAG, "VOICE_WAKE_DETECTED: 'Hey SEM' recognized with score=${String.format(Locale.US, "%.4f", score)}")
+        Log.i(TAG, "[SEMHAS][VOICE] Wake confidence: ${String.format(Locale.US, "%.4f", score)}")
+        Log.i(TAG, "[SEMHAS][VOICE] Wake word detected: Hey Jarvis")
+        Log.i(TAG, "VOICE_WAKE_DETECTED: 'Hey Jarvis' recognized with score=${String.format(Locale.US, "%.4f", score)}")
 
-        _lastRecognizedCommand.value = "Hey SEM"
-        _currentTranscript.value = "Hey SEM"
+        _lastRecognizedCommand.value = "Hey Jarvis"
+        _currentTranscript.value = "Hey Jarvis"
         _state.value = VoiceAssistantState.WAKE_DETECTED
 
         // Step 1: Temporarily stop wake-word detector to release the microphone hardware
@@ -348,7 +379,7 @@ class VoiceAssistantManager(
 
         // Step 2: Transition to LISTENING and launch Android SpeechRecognizer for ONE command only
         scope.launch {
-            delay(HANDOFF_DELAY_MS) // Safe 200ms handoff window
+            delay(HANDOFF_DELAY_MS) // Snappy 100ms handoff window
             if (!_isEnabled.value) return@launch
 
             _state.value = VoiceAssistantState.LISTENING
@@ -381,12 +412,17 @@ class VoiceAssistantManager(
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                     putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
                     putExtra("android.speech.extra.PREFER_OFFLINE", true)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500L)
                 }
 
                 voiceCommandStartTimeMs = System.currentTimeMillis()
+                Log.i(TAG, "[SEMHAS][VOICE] Starting command listening")
                 Log.i(TAG, "VOICE_COMMAND_START")
                 speechRecognizer?.startListening(intent)
                 isListeningSessionActive = true
+                Log.i(TAG, "[SEMHAS][VOICE] Recognition started")
                 Log.i(TAG, "COMMAND_LISTENING_STARTED: SpeechRecognizer active and listening for command")
 
                 // Timeout safety: 7 seconds if user does not speak after waking
@@ -472,6 +508,7 @@ class VoiceAssistantManager(
                     val elapsedMs = System.currentTimeMillis() - voiceCommandStartTimeMs
                     Log.i(TAG, "VOICE_FINAL_TRANSCRIPT transcript=\"$transcript\" elapsed_ms=$elapsedMs")
                     Log.i(TAG, "COMMAND_FINAL_RESULT: '$transcript'")
+                    Log.i(TAG, "[SEMHAS][VOICE] Recognition result: $transcript")
                     handleOneShotCommand(transcript)
                 } else {
                     finishCommandAndReturnToWaitingForWake()
@@ -496,6 +533,7 @@ class VoiceAssistantManager(
     private fun handleOneShotCommand(transcript: String) {
         if (!_isEnabled.value) return
 
+        Log.i(TAG, "[SEMHAS][VOICE] Command received: $transcript")
         _currentTranscript.value = transcript
         _lastRecognizedCommand.value = "\"$transcript\""
         _state.value = VoiceAssistantState.PROCESSING
@@ -907,9 +945,11 @@ class VoiceAssistantManager(
                 _state.value = VoiceAssistantState.WAITING_FOR_WAKE
                 _currentTranscript.value = null
 
+                Log.i(TAG, "[SEMHAS][VOICE] Returning to wake detection")
                 scope.launch {
                     delay(300L) // Ensure TTS audio has ended before waking microphone
                     if (_isEnabled.value && _state.value == VoiceAssistantState.WAITING_FOR_WAKE) {
+                        Log.i(TAG, "[SEMHAS][VOICE] Recognition restarted")
                         openWakeWordManager.startDetection(threshold = wakeThreshold, debounceMs = WAKE_DEBOUNCE_MS)
                     }
                 }

@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.semhas.app.MainActivity
 import com.semhas.app.R
@@ -32,12 +33,36 @@ class VoiceAssistantService : Service() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        acquireWakeLock()
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock == null) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = powerManager?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "SEMHAS:VoiceAssistantServiceWakeLock"
+            )?.apply {
+                setReferenceCounted(false)
+                acquire(12 * 60 * 60 * 1000L) // 12-hour safe upper bound
+            }
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (_: Exception) {}
+        wakeLock = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -55,7 +80,7 @@ class VoiceAssistantService : Service() {
     }
 
     private fun startForegroundWithNotification() {
-        val initialNotification = buildNotification("Listening for \"Hey SEM\"...")
+        val initialNotification = buildNotification("Listening for \"Hey Jarvis\"...")
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -73,8 +98,8 @@ class VoiceAssistantService : Service() {
         serviceScope.launch {
             manager.state.collectLatest { state ->
                 val notificationText = when (state) {
-                    VoiceAssistantState.WAITING_FOR_WAKE -> "Listening for \"Hey SEM\"..."
-                    VoiceAssistantState.WAKE_DETECTED -> "\"Hey SEM\" detected..."
+                    VoiceAssistantState.WAITING_FOR_WAKE -> "Listening for \"Hey Jarvis\"..."
+                    VoiceAssistantState.WAKE_DETECTED -> "\"Hey Jarvis\" detected..."
                     VoiceAssistantState.LISTENING -> "Listening for your command..."
                     VoiceAssistantState.PROCESSING -> "Processing command..."
                     VoiceAssistantState.SPEAKING -> manager.lastSpokenResponse.value ?: "Assistant responding..."
@@ -102,7 +127,7 @@ class VoiceAssistantService : Service() {
                 "SEMHAS Voice Assistant Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps the SEMHAS Voice Assistant active for \"Hey SEM\" wake phrase"
+                description = "Keeps the SEMHAS Voice Assistant active for \"Hey Jarvis\" wake phrase"
                 setShowBadge(false)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -150,6 +175,7 @@ class VoiceAssistantService : Service() {
     }
 
     private fun stopVoiceService() {
+        releaseWakeLock()
         SemhasApplication.instance.voiceAssistantManager.toggleAssistant(false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -157,6 +183,7 @@ class VoiceAssistantService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        releaseWakeLock()
         serviceScope.cancel()
     }
 }

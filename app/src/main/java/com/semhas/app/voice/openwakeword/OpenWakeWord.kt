@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
+import android.media.audiofx.NoiseSuppressor
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -40,7 +43,7 @@ class OpenWakeWord private constructor(
     private val debounceMs: Long
 ) {
     enum class BuiltInModel(internal val assetPath: String, val displayName: String) {
-        HEY_SEM("openwakeword/hey_jarvis_v0.1.onnx", "Hey SEM"),
+        HEY_JARVIS("openwakeword/hey_jarvis_v0.1.onnx", "Hey Jarvis"),
         ALEXA("openwakeword/alexa_v0.1.onnx", "Alexa"),
         HEY_MYCROFT("openwakeword/hey_mycroft_v0.1.onnx", "Hey Mycroft")
     }
@@ -64,8 +67,8 @@ class OpenWakeWord private constructor(
     }
 
     class Builder(private val context: Context) {
-        private var modelSource: ModelSource = ModelSource.BuiltIn(BuiltInModel.HEY_SEM)
-        private var threshold = 0.50f
+        private var modelSource: ModelSource = ModelSource.BuiltIn(BuiltInModel.HEY_JARVIS)
+        private var threshold = 0.35f
         private var debounceMs = 2000L
 
         fun setModel(model: BuiltInModel) = apply {
@@ -109,7 +112,7 @@ class OpenWakeWord private constructor(
         const val FEATURE_WINDOW = 16 // 16 sequential embeddings for classifier
         const val FEATURE_BUFFER_MAX = 120
         const val MEL_BUFFER_MAX = 970
-        const val SKIP_INITIAL_PREDICTIONS = 5
+        const val SKIP_INITIAL_PREDICTIONS = 1
         const val RAW_BUFFER_SECONDS = 10
     }
 
@@ -140,6 +143,15 @@ class OpenWakeWord private constructor(
     private var audioRecord: AudioRecord? = null
     private var processingThread: Thread? = null
     @Volatile private var isRunning = false
+
+    // Hardware Audio Effects (AGC, NS, AEC)
+    private var agc: AutomaticGainControl? = null
+    private var ns: NoiseSuppressor? = null
+    private var aec: AcousticEchoCanceler? = null
+
+    // Pre-warmed silence representations for instant first-attempt recognition
+    private var cachedSilenceMelFrame: FloatArray? = null
+    private var cachedSilenceEmbedding: FloatArray? = null
 
     // Detection & Score Listeners
     private var detectionListener: OnDetectionListener? = null
@@ -189,6 +201,7 @@ class OpenWakeWord private constructor(
                     Log.e(TAG, "Failed to initialize AudioRecord – check RECORD_AUDIO permission")
                     return@Thread
                 }
+                Log.i(TAG, "[SEMHAS][VOICE] Wake detector ready")
                 audioLoop()
             } catch (e: Exception) {
                 Log.e(TAG, "Fatal error in OpenWakeWord processing thread", e)
@@ -220,6 +233,8 @@ class OpenWakeWord private constructor(
         embeddingSession = null
         melSpecSession = null
         ortEnv = null
+        cachedSilenceMelFrame = null
+        cachedSilenceEmbedding = null
         detectionListener = null
         scoreListener = null
     }
@@ -246,6 +261,21 @@ class OpenWakeWord private constructor(
         wakeWordSession = ortEnv!!.createSession(modelBytes, opts)
         wakeWordInputName = wakeWordSession!!.inputNames.first()
         Log.i(TAG, "ONNX models initialized successfully. Classifier input: $wakeWordInputName")
+
+        // Pre-warm ONNX inference and cache real silence representation
+        try {
+            val silenceAudio = FloatArray(TOTAL_MEL_INPUT_SAMPLES)
+            val silenceMels = computeMelSpectrogram(silenceAudio)
+            if (silenceMels != null && silenceMels.isNotEmpty()) {
+                cachedSilenceMelFrame = silenceMels[0]
+                val warmMelList = ArrayList<FloatArray>(MEL_WINDOW_FRAMES)
+                repeat(MEL_WINDOW_FRAMES) { warmMelList.add(cachedSilenceMelFrame!!) }
+                cachedSilenceEmbedding = computeEmbedding(warmMelList)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Pre-warming ONNX inference buffers notice: ${e.message}")
+        }
+        Log.i(TAG, "[SEMHAS][VOICE] Wake detector initialized")
     }
 
     private fun loadAsset(name: String): ByteArray =
@@ -254,14 +284,70 @@ class OpenWakeWord private constructor(
     private fun initBuffers() {
         rawBuffer = FloatArray(SAMPLE_RATE * RAW_BUFFER_SECONDS)
         rawWritePos = 0
-        rawTotalWritten = 0L
+        rawTotalWritten = TOTAL_MEL_INPUT_SAMPLES.toLong()
 
         melBuffer.clear()
         featureBuffer.clear()
 
+        // Pre-fill melBuffer with 76 silence frames so embedding window is full immediately
+        val melFrame = cachedSilenceMelFrame ?: FloatArray(MEL_BINS) { 2.0f }
+        repeat(MEL_WINDOW_FRAMES) {
+            melBuffer.add(melFrame.clone())
+        }
+
+        // Pre-fill featureBuffer with 16 silence embeddings so classifier window is full immediately
+        val emb = cachedSilenceEmbedding ?: FloatArray(EMBEDDING_DIM) { 0.0f }
+        repeat(FEATURE_WINDOW) {
+            featureBuffer.add(emb.clone())
+        }
+
         predictionCount = 0
         lastDetectionTime = 0L
         latestScore = 0.0f
+    }
+
+    private fun attachAudioEffects(audioSessionId: Int) {
+        try {
+            if (AutomaticGainControl.isAvailable()) {
+                agc = AutomaticGainControl.create(audioSessionId)?.apply {
+                    enabled = true
+                }
+                Log.i(TAG, "AutomaticGainControl attached and enabled for audioSessionId=$audioSessionId")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to attach AutomaticGainControl: ${e.message}")
+        }
+
+        try {
+            if (NoiseSuppressor.isAvailable()) {
+                ns = NoiseSuppressor.create(audioSessionId)?.apply {
+                    enabled = true
+                }
+                Log.i(TAG, "NoiseSuppressor attached and enabled for audioSessionId=$audioSessionId")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to attach NoiseSuppressor: ${e.message}")
+        }
+
+        try {
+            if (AcousticEchoCanceler.isAvailable()) {
+                aec = AcousticEchoCanceler.create(audioSessionId)?.apply {
+                    enabled = true
+                }
+                Log.i(TAG, "AcousticEchoCanceler attached and enabled for audioSessionId=$audioSessionId")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to attach AcousticEchoCanceler: ${e.message}")
+        }
+    }
+
+    private fun releaseAudioEffects() {
+        try { agc?.release() } catch (_: Exception) {}
+        try { ns?.release() } catch (_: Exception) {}
+        try { aec?.release() } catch (_: Exception) {}
+        agc = null
+        ns = null
+        aec = null
     }
 
     private fun initAudioRecord(): Boolean {
@@ -292,6 +378,7 @@ class OpenWakeWord private constructor(
                 )
                 if (record.state == AudioRecord.STATE_INITIALIZED) {
                     audioRecord = record
+                    attachAudioEffects(record.audioSessionId)
                     Log.i(TAG, "AudioRecord initialized with audioSource=$source, bufferSize=$bufferSize")
                     return true
                 } else {
@@ -305,6 +392,7 @@ class OpenWakeWord private constructor(
     }
 
     private fun releaseAudioRecord() {
+        releaseAudioEffects()
         try { audioRecord?.stop() } catch (_: Exception) {}
         try { audioRecord?.release() } catch (_: Exception) {}
         audioRecord = null
@@ -315,6 +403,7 @@ class OpenWakeWord private constructor(
         val frame = ShortArray(FRAME_SAMPLES)
 
         Log.i(TAG, "Audio loop started. Listening for wake word...")
+        Log.i(TAG, "[SEMHAS][VOICE] Listening for Hey Jarvis")
 
         var logCounter = 0
 
@@ -387,7 +476,8 @@ class OpenWakeWord private constructor(
                     val now = System.currentTimeMillis()
                     if (now - lastDetectionTime > debounceMs) {
                         lastDetectionTime = now
-                        Log.i(TAG, "WAKE_WORD_DETECTED: 'Hey SEM' recognized with score=$score >= $threshold")
+                        Log.i(TAG, "[SEMHAS][VOICE] Wake confidence: ${String.format(Locale.US, "%.4f", score)}")
+                        Log.i(TAG, "[SEMHAS][VOICE] Wake word detected: Hey Jarvis")
                         val cb = detectionListener
                         mainHandler.post { cb?.onDetected(score) }
                     }
